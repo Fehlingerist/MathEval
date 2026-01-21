@@ -1,0 +1,2 @@
+g++ -std=c++26 src/main.cpp src/lexer/lexer.cpp -I"C:/dev/C_C++/StdToolset/" -I"src" -D_DEBUG -o "build/math_eval.exe" -g
+#g++ -std=c++26 -O3 src/main.cpp src/lexer/lexer.cpp -I"C:/dev/C_C++/StdToolset/" -I"src" -o "build/math_eval.exe"
