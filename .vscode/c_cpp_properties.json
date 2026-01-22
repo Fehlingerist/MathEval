@@ -4,7 +4,8 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "C:/dev/C_C++/StdToolset/"
+                "C:/dev/C_C++/StdToolset/",
+                "C:/dev/C_C++/Tokenizer/"
             ],
             "defines": [
                 "_DEBUG",
