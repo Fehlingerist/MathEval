@@ -26,6 +26,11 @@ namespace Util {
         Error,  
     };
 
+    struct SourceView {
+        unsigned char* source_buffer;
+        size_t source_size;
+    };
+
     class Source {
         public:
         size_t index;
@@ -43,6 +48,35 @@ namespace Util {
                 "Source buffer must exist" 
                 LexerErrorEnd
             );
+        };
+
+        Source slice(size_t start_index = 0,size_t length)
+        {
+            size_t end_index = start_index + length;
+            Assert(
+                end_index <= source_size,
+                LexerError
+                "broken assumption that end_index <= source_size is true"
+                LexerErrorEnd
+            )
+            return Source(source_buffer + start_index,length);
+        };
+
+        Source slice(size_t start_index = 0)
+        {
+            Assert(
+                source_size > start_index,
+                LexerError
+                "source_size > start_index is not true"
+                LexerErrorEnd
+            )
+
+            return slice(start_index,source_size-start_index);
+        };
+
+        inline unsigned char* get_source_buffer()
+        {
+            return source_buffer;
         };
 
         inline bool can_consume_sentinel()

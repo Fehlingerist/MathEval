@@ -13,35 +13,36 @@ of a string or a comment and this makes the error irrelevant
 #define LexerErrorEnd "\n"
 
 namespace Util { 
+ namespace TypeClassificator {
+   inline bool is_numeric_char(char numeric_char)
+   {
+      return numeric_char >= '0' && numeric_char <= '9';
+   };
  
- inline bool is_numeric_char(char numeric_char)
- {
-    return numeric_char >= '0' && numeric_char <= '9';
- };
- 
- inline bool is_letter_char(char letter_char)
- {
-    return (letter_char >= 'A' && letter_char <= 'Z') || (letter_char >= 'a' && letter_char <= 'z');
- };
+   inline bool is_letter_char(char letter_char)
+   {
+      return (letter_char >= 'A' && letter_char <= 'Z') || (letter_char >= 'a' && letter_char <= 'z') || letter_char == '_';
+   };
 
- inline bool is_special_char(char special_char)
- {
-    return ((special_char >= '!' && special_char <= '~') && !is_numeric_char(special_char) && !is_letter_char(special_char));
- };
+   inline bool is_special_char(char special_char)
+   {
+      return ((special_char >= '!' && special_char <= '~') && !is_numeric_char(special_char) && !is_letter_char(special_char));
+   };
 
- inline bool is_whitespace_char(char whitespace_char)
- {
-    return whitespace_char == ' ' || whitespace_char == '\t' || whitespace_char == '\r' || whitespace_char == '\n';
- };
+   inline bool is_whitespace_char(char whitespace_char)
+   {
+      return whitespace_char == ' ' || whitespace_char == '\t' || whitespace_char == '\r' || whitespace_char == '\n';
+   };
 
- inline bool is_unicode(char unicode_char)
- {
-   return static_cast<unsigned char>(unicode_char) >= 0b10000000;
- };
+   inline bool is_unicode(char unicode_char)
+   {
+      return static_cast<unsigned char>(unicode_char) >= 0b10000000;
+   };
 
- inline bool is_valid_char(char unknown_char)
- {
-    return (unknown_char >= ' ' && unknown_char <= '~') || is_whitespace_char(unknown_char) || is_unicode(unknown_char) || unknown_char == '\0';
+   inline bool is_valid_char(char unknown_char)
+   {
+      return (unknown_char >= ' ' && unknown_char <= '~') || is_whitespace_char(unknown_char) || is_unicode(unknown_char) || unknown_char == '\0';
+   };
  };
 
  enum class CharacterType : uint8_t {
@@ -55,6 +56,7 @@ namespace Util {
  };
 
  static const auto character_map = [](){
+   using namespace TypeClassificator;
    std::array<CharacterType,256> character_map;
 
    for (int character_index = 0;character_index <= 255;character_index++)
@@ -123,34 +125,6 @@ namespace Util {
     }
     return ascii_char;
  };
- 
- TokenType get_token_type(LexerContext& lexer_context)
- {
-   auto current_char = static_cast<unsigned char>(lexer_context.source.see_current());
-   auto character_type = character_map[current_char];
-
-   switch (character_type)
-   {
-      case CharacterType::Error:
-        return TokenType::Error;
-      case CharacterType::Unicode:
-         return TokenType::UnicodeSequence;
-      case CharacterType::Letter: 
-         return TokenType::Identifier;
-      case CharacterType::Numeric:
-         return TokenType::Numeric;
-      case CharacterType::Symbol:
-         return TokenType::SpecialChar;
-      case CharacterType::Whitespace:
-         return TokenType::Whitespace;
-      case CharacterType::EndOfFile:
-         return TokenType::EndOfFile;
-      default:
-        return TokenType::Error;
-   };
-
-   return TokenType::Error;
- };
 
  void consume_eof_token(LexerContext& lexer_context)
  {
@@ -180,7 +154,7 @@ namespace Util {
    auto first = lexer_context.source.see_current();
 
    Assert(
-      is_unicode(first),
+      character_map[first] == CharacterType::Unicode && first >= 128,
       LexerError
       "expected unicode character but got something else instead"
       LexerErrorEnd
@@ -230,7 +204,7 @@ namespace Util {
    auto current_char = lexer_context.source.see_current();
 
    Assert(
-      is_letter_char(current_char),
+      character_map[current_char] == CharacterType::Letter,
       LexerError
       "expected letter char, got something else instead"
       LexerErrorEnd
@@ -269,7 +243,8 @@ namespace Util {
  {
   auto current_char = lexer_context.source.see_current();
 
-  Assert(is_numeric_char(current_char),
+  Assert(
+   character_map[current_char] == CharacterType::Numeric,
    LexerError
    "consume_numeric_token function called when current_char is not numeric"
    LexerErrorEnd
@@ -287,7 +262,7 @@ namespace Util {
    auto current_char = lexer_context.source.see_current();
 
    Assert(
-      is_special_char(current_char),
+      character_map[current_char] == CharacterType::Symbol,
       LexerError
       "expected special char"
       LexerErrorEnd
@@ -319,6 +294,34 @@ namespace Util {
       current_char = lexer_context.source.see_current();
       char_type = character_map[current_char];
    };
+ };
+
+  TokenType get_token_type(LexerContext& lexer_context)
+  {
+   auto current_char = static_cast<unsigned char>(lexer_context.source.see_current());
+   auto character_type = character_map[current_char];
+
+   switch (character_type)
+   {
+      case CharacterType::Error:
+        return TokenType::Error;
+      case CharacterType::Unicode:
+         return TokenType::UnicodeSequence;
+      case CharacterType::Letter: 
+         return TokenType::Identifier;
+      case CharacterType::Numeric:
+         return TokenType::Numeric;
+      case CharacterType::Symbol:
+         return TokenType::SpecialChar;
+      case CharacterType::Whitespace:
+         return TokenType::Whitespace;
+      case CharacterType::EndOfFile:
+         return TokenType::EndOfFile;
+      default:
+        return TokenType::Error;
+   };
+
+   return TokenType::Error;
  };
 
  Token Lexer::get_next_token()
