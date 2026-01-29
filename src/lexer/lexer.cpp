@@ -127,16 +127,6 @@ namespace Util {
     return map;
  }();
 
- char to_lower_case(char ascii_char)
- {
-    const auto offset = 'a' - 'A';
-    if (ascii_char >= 'A' && ascii_char <= 'Z')
-    {
-        return ascii_char + offset;
-    }
-    return ascii_char;
- };
-
  void consume_eof_token(LexerContext& lexer_context)
  {
    Assert(

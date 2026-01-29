@@ -5,11 +5,27 @@
 
 #include <DebuggerAssets/debugger/debugger.hpp>
 
-#define CONDITIONAL_CONSUME()\
-
 #define NormalizerError "Normalizer Error: "
 #define NormalizerErrorEnd "\n"
 
+/*
+Number consumer is fragile: it assumes certain token types and sequences 
+(e.g., numeric tokens followed by special chars like '.' or 'b'/'x') 
+without a robust type system, leading to potential misclassification 
+or silent errors. Structurally, branching logic is repeated and tightly 
+coupled to token lookahead, making it error-prone for non-decimal, real, 
+and integer numbers. Should use explicit number hints or token subtypes 
+to simplify and harden the logic.
+*/
+
+/*
+TRY_CONSUME should be used when multiple consume branches are possible within the same function
+*/
+#define TRY_CONSUME(func, context) \
+    func(context); \
+    if ((context).ultimate_token_type == NormalTokenType::Error) { \
+        return; \
+    }
 
 namespace Normalizer {
     using namespace Util;
@@ -49,6 +65,82 @@ namespace Normalizer {
     };
 
     namespace TypeGuessing {
+        inline bool is_neutral_token(TokenType type) {
+            switch (type) {
+                case TokenType::Whitespace:
+                case TokenType::NewLine:
+                case TokenType::EndOfFile:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        inline bool is_numeric_char(char numeric_char)
+        {
+            return numeric_char >= '0' && numeric_char <= '9';
+        }; 
+
+        char to_lower_case(char ascii_char)
+        {
+            const auto offset = 'a' - 'A';
+            if (ascii_char >= 'A' && ascii_char <= 'Z')
+            {
+                return ascii_char + offset;
+            }
+            return ascii_char;
+        };
+        
+        inline bool is_hex_code_char(char hex_code)
+        {
+            return (to_lower_case(hex_code) >= 'a' && to_lower_case(hex_code) <= 'f') || is_numeric_char(hex_code);
+        };
+
+        inline bool is_bin_code_char(char bin_code)
+        {
+            return bin_code >= '0' && bin_code <= '1';
+        };
+
+        inline bool is_symbol_char(NormalTokenStreamContext& normal_token_stream_context,Token current_token,unsigned char expected_char)
+        {
+            Assert(
+                current_token.token_type == TokenType::SpecialChar,
+                NormalizerError
+                "expected symbol token, got something else"
+                NormalizerErrorEnd
+            )
+
+            if (current_token.length > 1)
+            {
+                return false;
+            };
+
+            auto source_viewer = Source(normal_token_stream_context.token_stream_reader.source_buffer + current_token.offset,current_token.length);
+            auto current_char = source_viewer.see_current();
+
+            return current_char == expected_char;
+        };
+        
+        inline bool is_number_char(NormalTokenStreamContext& normal_token_stream_context,Token current_token,unsigned char expected_number_char)
+        {
+            Assert(
+                current_token.token_type == TokenType::Numeric,
+                NormalizerError
+                "expected symbol token, got something else"
+                NormalizerErrorEnd
+            )
+
+            if (current_token.length > 1)
+            {
+                return false;
+            };
+
+            auto source_viewer = Source(normal_token_stream_context.token_stream_reader.source_buffer + current_token.offset,current_token.length);
+            auto current_char = source_viewer.see_current();
+
+            return current_char == expected_number_char;
+        };
+
         inline bool is_inline_comment(NormalTokenStreamContext& normal_token_stream_context)
         {
             auto& token_reader = normal_token_stream_context.token_stream_reader;
@@ -80,7 +172,7 @@ namespace Normalizer {
             auto current_char = source_viewer.see_current();
             auto next_char = source_viewer.peek();
 
-             return NormalizerTypeClassificator::is_slash(current_char) && (NormalizerTypeClassificator::is_asterisk(next_char));
+            return NormalizerTypeClassificator::is_slash(current_char) && (NormalizerTypeClassificator::is_asterisk(next_char));
         };
 
         inline bool is_block_comment_end(NormalTokenStreamContext& normal_token_stream_context)
@@ -189,9 +281,181 @@ namespace Normalizer {
 
     };
 
+    inline void consume_bin_decimal_code(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+            
+        Assert(
+            current_token.token_type == TokenType::Numeric,
+            NormalizerError
+            "expected numeric token, but got something else"
+            NormalizerErrorEnd
+        )   
+
+        auto source_viewer = Source(normal_token_stream_context.token_stream_reader.source_buffer + current_token.offset,current_token.length);
+
+        auto current_char = source_viewer.see_current();
+        while (current_char != '\0')
+        {
+            if (!TypeGuessing::is_bin_code_char(current_char))
+            {
+                return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+            }    
+            source_viewer.consume();
+            current_char = source_viewer.see_current();
+        };
+    };  
+
+    inline void consume_hex_decimal_code(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+            
+        Assert(
+            current_token.token_type == TokenType::Numeric || current_token.token_type == TokenType::Identifier,
+            NormalizerError
+            "expected numeric/literal token string but got something else"
+            NormalizerErrorEnd
+        )
+
+        auto start_token = current_token;
+        auto end_token = current_token;
+
+        while (current_token.token_type == TokenType::Numeric || current_token.token_type == TokenType::Identifier)
+        {
+            end_token = current_token;
+            normal_token_stream_context.token_stream_reader.consume();
+            current_token = normal_token_stream_context.token_stream_reader.see_current();
+        };
+
+        auto token_start = normal_token_stream_context.token_stream_reader.source_buffer + start_token.offset;
+        auto token_length = end_token.offset - start_token.offset + end_token.length;
+
+        if (token_length == 0)
+        {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        };
+
+        auto source_viewer = Source(token_start,token_length);
+
+        auto current_char = source_viewer.see_current();
+        while (current_char != '\0')
+        {
+            if (!TypeGuessing::is_hex_code_char(current_char))
+            {
+                return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+            }    
+            source_viewer.consume();
+            current_char = source_viewer.see_current();
+        };
+    };
+
+    inline void consume_non_decimal_number(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+        
+        Assert(
+            current_token.token_type == TokenType::Identifier,
+            NormalizerError
+            "expected numeric type token, got something else"
+            NormalizerErrorEnd
+        )
+
+        if (TypeGuessing::is_symbol_char(normal_token_stream_context,current_token,'b'))
+        {
+            return consume_bin_decimal_code(normal_token_stream_context);
+        } else if(TypeGuessing::is_symbol_char(normal_token_stream_context,current_token,'x'))
+        {
+            return consume_hex_decimal_code(normal_token_stream_context);
+        } else {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        };
+    };
+
+    inline void consume_real_number(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+
+        Assert(
+            current_token.token_type == TokenType::SpecialChar,
+            NormalizerError
+            "expected numeric type token, got something else"
+            NormalizerErrorEnd
+        )
+
+        if (TypeGuessing::is_symbol_char(normal_token_stream_context,current_token,'.'))
+        {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        };
+
+        auto next_token = normal_token_stream_context.token_stream_reader.peek();
+
+        normal_token_stream_context.token_stream_reader.consume();
+
+        if (next_token.token_type == TokenType::Numeric)
+        {
+            normal_token_stream_context.token_stream_reader.consume();
+            return;
+        } else {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        };
+    };
+
+    inline void consume_integer_number(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+        Assert(
+            current_token.token_type == TokenType::Numeric,
+            NormalizerError
+            "expected numeric type token, got something else"
+            NormalizerErrorEnd
+        )
+        normal_token_stream_context.token_stream_reader.consume();
+    };
+
+    inline void consume_decimal_number(NormalTokenStreamContext& normal_token_stream_context)
+    {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+
+        Assert(
+            current_token.token_type == TokenType::Numeric,
+            NormalizerError
+            "expected numeric type token, got something else"
+            NormalizerErrorEnd
+        )
+
+        TRY_CONSUME(consume_integer_number,normal_token_stream_context);
+
+        auto next_token = normal_token_stream_context.token_stream_reader.see_current();
+
+        if (TypeGuessing::is_neutral_token(next_token.token_type))
+        {
+            return;
+        } else if(next_token.token_type == TokenType::SpecialChar)
+        {
+            return consume_real_number(normal_token_stream_context);
+        } else {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        };
+    };
+
     inline void consume_number_token(NormalTokenStreamContext& normal_token_stream_context)
     {
+        auto current_token = normal_token_stream_context.token_stream_reader.see_current();
+        auto token_size = current_token.length;
 
+        auto next_token = normal_token_stream_context.token_stream_reader.peek();
+
+        if (next_token.token_type == TokenType::Whitespace)
+        {
+            return consume_decimal_number(normal_token_stream_context);
+        }
+        else if (TypeGuessing::is_number_char(normal_token_stream_context,current_token,'0') && next_token.token_type == TokenType::Identifier)
+        {
+            return consume_non_decimal_number(normal_token_stream_context);
+        }
+        else {
+            return normal_token_stream_context.emit_error(NormalErrorCode::MalformedNumber);
+        }
     };
     
     inline void consume_inline_comment(NormalTokenStreamContext& normal_token_stream_context)
@@ -266,11 +530,19 @@ namespace Normalizer {
             NormalizerErrorEnd
         )
 
-        auto keyword = KeywordClassifier::get_keyword_type(std::string((char*)normal_token_stream_context.token_stream_reader.source_buffer + current_token.offset,current_token.length).c_str());
+        auto keyword_source = reinterpret_cast<char*>(normal_token_stream_context.token_stream_reader.source_buffer) + current_token.offset; //invalid
+        auto keyword_length = current_token.length;
+
+        auto keyword_string = std::string(keyword_source,keyword_length);
+
+        auto keyword = KeywordClassifier::get_keyword_type(keyword_string.c_str());
 
         if (keyword != KeywordClassifier::Keyword::Unknown)
         {
-         emit_keyword_token(normal_token_stream_context,keyword);
+            emit_keyword_token(normal_token_stream_context,keyword);
+        }
+        else {
+            return normal_token_stream_context.emit_error(NormalErrorCode::UnknowSymbol);
         }
 
         normal_token_stream_context.token_stream_reader.consume();
@@ -302,9 +574,12 @@ namespace Normalizer {
             NormalizerErrorEnd
         )
 
-        auto keyword = get_symbol_from_cchar(
-            std::string((char*)normal_token_stream_context.token_stream_reader.source_buffer + current_token.offset,current_token.offset - start_token.offset + start_token.length).c_str()
-        );
+        const auto* token_start_ptr = (char*)normal_token_stream_context.token_stream_reader.source_buffer + start_token.offset;
+        const size_t token_length = (current_token.offset + current_token.length) - start_token.offset;
+
+        const std::string token_string(token_start_ptr, token_length);
+
+        auto keyword = get_symbol_from_cchar(token_string.c_str());
 
         while (current_token.token_type == TokenType::SpecialChar && keyword != SymbolKind::UNKNOWN)
         {
@@ -316,7 +591,6 @@ namespace Normalizer {
         {
             normal_token_stream_context.emit_error(NormalErrorCode::UnknowSymbol);
         };
-
     };
 
     inline void error_token(NormalTokenStreamContext& normal_token_stream_context)

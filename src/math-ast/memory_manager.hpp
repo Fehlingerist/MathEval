@@ -24,16 +24,16 @@ namespace Util {
             return offset > size || offset + t_size > size;
         };
 
-    inline size_t find_first_aligning_address(size_t type_size)
-    {
-        size_t current_absolute_address = (size_t)memory_pointer + byte_offset;
-        size_t remainder = current_absolute_address % type_size;
+        inline size_t find_first_aligning_address(size_t type_size)
+        {
+            size_t current_absolute_address = (size_t)memory_pointer + byte_offset;
+            size_t remainder = current_absolute_address % type_size;
     
-        if (remainder == 0) return byte_offset;
+            if (remainder == 0) return byte_offset;
 
-        size_t padding = type_size - remainder;
-        return byte_offset + padding;
-    }
+            size_t padding = type_size - remainder;
+            return byte_offset + padding;
+        }
 
         inline size_t move_data(byte* new_block)
         {   

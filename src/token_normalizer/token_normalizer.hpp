@@ -16,7 +16,8 @@ namespace Normalizer{
         None,
         CommentWithoutClosure,
         UnexpectedToken,
-        UnknowSymbol
+        UnknowSymbol,
+        MalformedNumber
     };
 
     enum class NormalTokenType {
@@ -40,16 +41,28 @@ namespace Normalizer{
         size_t index = 0; // index into lexer token stream
         NormalTokenType token_type = NormalTokenType::Error;
     };  
+
+    enum class NumberBase {Integer, Decimal, Binary, Hex, Unknown };
+
+    struct NumberInfo {
+        NumberBase base = NumberBase::Unknown;
+        size_t start_index = 0;
+        size_t length = 0;
+        // optionally store value later, but not required
+    };
+
     /*
         Token Normalizer is language aware at some point.
         It detects basic expressions like comments and distinguishes number literals from each other.
     */
     class TokenStreamReader {   
+        private:
         static inline Util::Token EOF_TOKEN = (Util::Token)[](){
             Util::Token TOKEN = Util::Token();
             TOKEN.token_type = Util::TokenType::EndOfFile;
             return TOKEN;
         }();
+        public:
 
         Util::Lexer lexer; //It's for error analysis/backtracking if ever needed (will be needed really)
         std::shared_ptr<std::vector<Util::Token>> token_stream_ptr;
@@ -148,14 +161,17 @@ namespace Normalizer{
         TokenStreamReader token_stream_reader;
 
         std::vector<NormalError> errors;
-
         std::vector<KeywordClassifier::Keyword> keyword_list;
         std::vector<SymbolClassifier::SymbolKind> symbol_list;
+        std::vector<NumberInfo> number_list;  
+
 
         NormalTokenType ultimate_token_type;
 
         NormalTokenStreamContext(Util::Source& source): token_stream_reader(source)
         {};  
+
+        
 
         void emit_error(NormalErrorCode error_code)
         {
@@ -170,12 +186,25 @@ namespace Normalizer{
         void emit_keyword(KeywordClassifier::Keyword keyword)
         {
             keyword_list.push_back(keyword);
+
+            ultimate_token_type = NormalTokenType::KeywordIdentifier;
         };
 
-        void emit_symbol(SymbolClassifier::SymbolKind symbol)
+        void emit_symbol(SymbolClassifier::SymbolKind symbol) 
         {
             symbol_list.push_back(symbol);
+
+            //ultimate_token_type = NormalTokenType::Symbol; this already is a symbol so setting the ultimate type is redundant
         };
+
+        void emit_number(NumberBase base, size_t start, size_t length) {
+            NumberInfo info;
+            info.base = base;
+            info.start_index = start;
+            info.length = length;
+            number_list.push_back(info);
+            ultimate_token_type = NormalTokenType::Number;
+        }
     };
 
     class NormalTokenStream {
