@@ -13,17 +13,24 @@ namespace Util {
 
     using namespace std::string_literals;
 
-    auto LexerError = "Lexer Error: "s;
-    auto LexerErrorEnd = "\n"s;
+    consteval auto LexerError = "Lexer Error: "s;
+    consteval auto LexerErrorEnd = "\n"s;
 
     enum class ErrorCode: uint8_t {
         None,
+        UnknownSymbol,
         UnexpectedCharacter,
+        UnexpectedTokenType,
         InvalidByte,
         TruncatedUnicodeSequence,
         TruncatedNumberSequence,
         MalformedNumber,
         UnclosedComment,
+        UnclosedString,
+        UnclosedChar,
+        InvalidCharCode,
+        TooLongChar,
+        UncloedLuaBlock,
     };
 
     enum class TokenType: uint8_t {
@@ -36,6 +43,7 @@ namespace Util {
         String,
         Char,
         EndOfFile,
+        LuaBlock,
         Error,
         None
     };
@@ -217,11 +225,30 @@ namespace Util {
         inline static constexpr TokenType value = TokenType::Comment;
     };
 
+    struct StringToken : TokenBase {};
+    template<>
+    struct TokenKind<StringToken> {
+        inline static constexpr TokenType value = TokenType::String;
+    };  
+
+    struct CharToken: TokenBase {};
+    template<>
+    struct TokenKind<CharToken> {
+        inline static constexpr TokenType value = TokenType::Char;
+    };
+
     struct NewLineToken : TokenBase {};
     template<>
     struct TokenKind<NewLineToken> {
         inline static constexpr TokenType value = TokenType::NewLine;
     };  
+
+    struct LuaBlockToken: TokenBase {};
+    template<>
+    struct TokenKind<LuaBlockToken>
+    {
+        inline static constexpr TokenType value = TokenType::LuaBlock;
+    };
 
     struct EOFToken : TokenBase {};
     template<>
@@ -301,12 +328,32 @@ namespace Util {
         NumberType number_type = NumberType::None;
         NumberBase number_base = NumberBase::None;
     };
+
+    enum ConsumerType  {
+        CLua,
+        LuaU,
+        LuaUCapture,
+    };
+
+    struct LuaUCaptureState {
+        size_t brace_balance = 0; //Brace balance is how many "[" braces are against "]"
+        bool met_first_brace = false;
+    };
+
+    struct LuaUCodeState {
+        size_t brace_balance = 0; //Brace balance is how many "{" braces are against "}"
+        bool met_first_brace = false;
+    };
     
     class LexerContext {
         private:
         bool emitted = false;
+        ConsumerType consumer_type = ConsumerType::CLua;
 
         public:
+
+        LuaUCaptureState luau_capture_state;
+
         Source source;
         std::vector<Error> errors;
         std::vector<NumberHint> numbers;
@@ -320,7 +367,18 @@ namespace Util {
         LexerContext(Source& source): source(source)
         {};
 
-        void token_enter()
+        inline ConsumerType see_current_consumer_mode()
+        {
+            return consumer_type;
+        };
+
+        inline void switch_consumer_mode(ConsumerType new_consumer_type)
+        {
+            consumer_type = new_consumer_type;
+            luau_capture_state = LuaUCaptureState();
+        };
+
+        inline void token_enter()
         {
             emitted = false;
         };
@@ -344,7 +402,7 @@ namespace Util {
             return emitted;
         };
 
-        void record_error(ErrorCode error_code)
+        inline void record_error(ErrorCode error_code)
         {
             on_emit();
 
@@ -356,7 +414,7 @@ namespace Util {
             ultimate_token_type = TokenKind<ErrorToken>::value;
         };
 
-        void record_number(NumberBase number_base, NumberType number_type)
+        inline void record_number(NumberBase number_base, NumberType number_type)
         {
             on_emit();
 
@@ -370,7 +428,7 @@ namespace Util {
             ultimate_token_type = TokenKind<NumericToken>::value;
         };
 
-        void record_symbol(SymbolClassifier::SymbolKind symbol)
+        inline void record_symbol(SymbolClassifier::SymbolKind symbol)
         {
             on_emit();
 
@@ -380,7 +438,7 @@ namespace Util {
             ultimate_token_type = TokenKind<SymbolToken>::value;
         };
 
-        void record_identifier(std::string_view identifier)
+        inline void record_identifier(std::string_view identifier)
         {
             on_emit();
 

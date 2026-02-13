@@ -1,0 +1,99 @@
+// ---------------------------
+// CLua Example: Extensive Demo
+// ---------------------------
+
+// Import modules
+@LUA []{
+    local mathModule = require(Workspace.MathModule)
+    local gfxModule  = require(Workspace.GraphicsModule)
+}
+
+// Type hints and memory management
+buffer vec3 position;          // stored in thread buffer
+buffer vec3 velocity;          // stored in thread buffer
+int frameCount = 0;            // local CLua variable
+float deltaTime = 0.016;       // local CLua variable
+
+// External function
+/*
+    @description Returns the current system tick
+*/
+extern float system_tick() {
+    return 0.0f; // placeholder
+}
+
+// Virtual function: can be referenced and used in call tree
+virtual void update_physics(vec3& pos, vec3& vel, float dt) {
+    pos += vel * dt;
+}
+
+float clamp(float val, float minVal, float maxVal) {
+    if (val < minVal) return minVal;
+    if (val > maxVal) return maxVal;
+    return val;
+}
+
+// Main entry
+int main() {
+
+    int a = 0;
+    int b = 10;
+    int c = 0;
+    int d = 0;
+
+    // ---------------------------
+    // LuaU code block with captures
+    // ---------------------------
+    @LUA [&b,a]{
+        b += 5               // modifies captured reference
+        print("b:", b)
+
+        a += 1               // modifies local copy
+        print("a copy:", a)
+
+        local result = mathModule.add(a, b)
+        print("add result:", result)
+    } export [a,b] as [c,d];   // a copy exported, b reference exported
+
+    // ---------------------------
+    // Physics update
+    // ---------------------------
+    forced_sync(position, velocity);
+
+    @LUA [&position,&velocity,copy deltaTime]{
+        velocity += vec3.new(0, -9.8, 0) * deltaTime
+        position += velocity * deltaTime
+        print("position:", position)
+    } export [position, velocity] as [position, velocity];
+
+    // ---------------------------
+    // Loop with locals
+    // ---------------------------
+    for int i = 0; i < 10; i += 1 {
+        a += i
+        b += i*2
+    }
+
+    // ---------------------------
+    // Using buffer variables
+    // ---------------------------
+    deltaTime = system_tick() * 0.001
+    velocity.y = clamp(velocity.y, -50.0, 50.0)
+
+    // ---------------------------
+    // Output
+    // ---------------------------
+    printf("a:", a)          // from loop and LuaU export
+    printf("b:", b)          // modified in LuaU block and loop
+    printf("c:", c)          // copy of a from LuaU block
+    printf("d:", d)          // reference b from LuaU block
+
+    printf("position:", position)
+    printf("velocity:", velocity)
+
+    return static_cast<int>(0);
+}
+
+// ---------------------------
+// End of CLua example
+// ---------------------------
