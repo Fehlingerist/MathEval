@@ -1,0 +1,46 @@
+@LUA []{
+    local mathModule = require(Workspace.MathModule);
+    local gfxModule  = require(Workspace.GraphicsModule);
+}
+
+buffer vec3 playerPos;
+buffer vec3 playerVel;
+int frameCount = 0;
+float deltaTime = 0.016;
+int a = 0;
+int b = 0;
+
+virtual void apply_force(vec3& vel, vec3 force) {
+    vel += force;
+}
+
+extern float system_tick()
+
+int main() {
+
+    // LuaU block with reference
+    @LUA [&b, &playerPos]{
+        b += 10;                 // affects CLua b directly
+        playerPos += Vector3.new(0, 1, 0);
+        print("b:", b);
+        print("playerPos:", playerPos);
+    }
+
+    // Copied variable example
+    int c = 0;
+    @LUA [a] {
+        a += 1
+        print("a copy:", a)
+    } export [a] as [c];  // only copied variables need export
+
+    // Physics update
+    deltaTime = system_tick() * 0.001;
+    playerVel += vec3.new(0, -9.8, 0) * deltaTime;
+
+    printf("b:", b);          // modified directly by LuaU reference block
+    printf("c:", c);          // a copy exported from LuaU
+    printf("playerPos:", playerPos);
+    printf("playerVel:", playerVel);
+
+    return static_cast<int>(0);
+}

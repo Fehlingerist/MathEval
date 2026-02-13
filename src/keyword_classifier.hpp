@@ -43,7 +43,8 @@
     Keyword(Constexpr, "constexpr") \
     Keyword(Consteval, "consteval") \
     Keyword(StaticAssert, "static_assert") \
-    Keyword(Sizeof, "sizeof")
+    Keyword(Sizeof, "sizeof")   \
+    Keyword(Lua,"Lua")
 
 namespace KeywordClassifier {
     enum class Keyword {

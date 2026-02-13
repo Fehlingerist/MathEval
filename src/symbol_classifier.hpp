@@ -120,17 +120,30 @@ std::unordered_map<std::string, SymbolKind> normalized_symbols = {
         {"@", SymbolKind::AT_SIGN}
     };
 
-    SymbolKind get_symbol_from_cchar(const char* string_symbol)
+    SymbolKind get_symbol_from_buffer_fragment(const char* buffer_fragment, size_t length)
     {
-        if (!string_symbol) return SymbolKind::UNKNOWN;
+        if (length == 0 || buffer_fragment == nullptr)
+            return SymbolKind::UNKNOWN; 
 
-        auto iterator = normalized_symbols.find(string_symbol);
-
-        if (iterator == normalized_symbols.end())
+        for (const auto& [symbol_str, kind] : normalized_symbols)
         {
-            return SymbolKind::UNKNOWN;
-        }
+            if (symbol_str.size() != length)
+                continue;
 
-        return iterator->second;
-    };
+            bool match = true;
+            for (size_t i = 0; i < length; ++i)
+            {
+                if (buffer_fragment[i] != symbol_str[i])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+                return kind;
+            }   
+
+            return SymbolKind::UNKNOWN; 
+        }
 }
