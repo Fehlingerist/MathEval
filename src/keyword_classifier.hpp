@@ -38,7 +38,7 @@
     Keyword(False, "false") \
     Keyword(Nil, "nullptr") \
     Keyword(Typedef, "typedef") \
-    Keyword(Auto, "Auto") \
+    Keyword(Auto, "auto") \
     Keyword(Decltype, "decltype") \
     Keyword(Constexpr, "constexpr") \
     Keyword(Consteval, "consteval") \

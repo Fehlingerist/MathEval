@@ -255,9 +255,25 @@ namespace Util {
    void consume_decimal_numeric_token(LexerContext& lexer_context)
    {
       auto current_char = lexer_context.source.see_current();
-      test_char_type(current_char,CharacterType::Numeric);
+      auto first_char = current_char;
+
+      if (current_char == '.')
+      {
+         lexer_context.source.consume();
+         current_char = lexer_context.source.see_current();
+      };
+
+      if (current_char == '.')
+      {
+         return lexer_context.record_error(ErrorCode::MalformedNumber);
+      };
 
       consume_numbers(lexer_context);
+
+      if(first_char == '.')
+      {
+         return lexer_context.record_number(NumberBase::Decimal,NumberType::Float);
+      };
 
       auto middle_char = lexer_context.source.see_current();
       auto middle_char_type = character_map[middle_char];
@@ -268,7 +284,7 @@ namespace Util {
          //most probably a float
          lexer_context.source.consume();
          consume_numbers(lexer_context);
-      } else if (TypeClassificator::is_neutral_char_type(middle_char_type)|| is_symbol) [[likely]]
+      } else if (TypeClassificator::is_neutral_char_type(middle_char_type) || is_symbol) [[likely]]
       {
          return lexer_context.record_number(NumberBase::Decimal,NumberType::Integer);
       } 
@@ -296,7 +312,12 @@ namespace Util {
    void consume_numeric_token(LexerContext& lexer_context)
    {
       auto current_char = lexer_context.source.see_current();
-      test_char_type(current_char,CharacterType::Numeric);
+
+      if (current_char != '.')
+      {
+       test_char_type(current_char,CharacterType::Numeric);
+      }
+
       auto next_char = lexer_context.source.peek();
 
       if (current_char == '0' && next_char == 'x')
@@ -337,7 +358,7 @@ namespace Util {
       
       while (char_type == CharacterType::Symbol)
       {
-         auto length = lexer_context.source.index - start + 1; //include here
+         auto length = lexer_context.source.index - start + 1; 
          auto next_symbol = get_symbol_from_buffer_fragment(start_ptr,length);
       
          if (next_symbol == SymbolKind::UNKNOWN)
@@ -393,10 +414,12 @@ namespace Util {
          inline_char = lexer_context.source.see_current();
       };
 
-      if (character_map[inline_char] == CharacterType::EndOfFile)
-      {
-         return lexer_context.record_error(ErrorCode::UnclosedComment);
-      };
+      /*
+         if (character_map[inline_char] == CharacterType::EndOfFile)
+         {
+            return lexer_context.record_error(ErrorCode::UnclosedComment);
+         };
+      */
 
       return;
    };
@@ -495,10 +518,8 @@ namespace Util {
    };
 
    void consume_char_token(LexerContext& lexer_context) {
-
-      auto current_char = lexer_context.source.see_current();
       Assert(
-         current_char == '\'',
+         lexer_context.source.see_current() == '\'',
          LexerError +
          "expected string to begin with \"\'\", got something else instead"s +
          LexerErrorEnd
@@ -533,7 +554,7 @@ namespace Util {
       return;
    }
    
-   namespace CLUA {
+   namespace CLua {
       TokenType guess_token_type(LexerContext& lexer_context)
       {
          auto current_char = static_cast<unsigned char>(lexer_context.source.see_current());
@@ -560,6 +581,9 @@ namespace Util {
                } else if(current_char == '\'')
                {
                   return TokenKind<CharToken>::value;
+               } else if (current_char == '.' && character_map[next_char] == CharacterType::Numeric)
+               {
+                  return TokenKind<NumericToken>::value;
                };
 
                return TokenKind<SymbolToken>::value;
@@ -589,7 +613,7 @@ namespace Util {
          case TokenType::Symbol:
             if (lexer_context.source.see_current() == '@')
             {
-               lexer_context.switch_consumer_mode(ConsumerType::LuaUCapture);
+               lexer_context.switch_consumer_mode(ConsumerMode::LuaUCapture);
             };
             consume_symbol_token(lexer_context);
             break;
@@ -631,13 +655,14 @@ namespace Util {
       };
    }
 
-   namespace LUAUCapture {
-      using CLUA::guess_token_type;
+   namespace LuaUCapture {
+      using CLua::guess_token_type;
 
       void get_next_token(LexerContext& lexer_context, TokenType token_type){
          switch (token_type)
          {
          case TokenType::Symbol:
+         {
             auto current_symbol = lexer_context.source.see_current();
 
             if (current_symbol == '[')
@@ -652,24 +677,32 @@ namespace Util {
 
             consume_symbol_token(lexer_context);
             break;
-         case TokenType::None:
-            Assert(false,
-               LexerError +
-               "unexpected token type: got none"s +
-               LexerErrorEnd  
-            );
+         }
          default:
-            CLUA::get_next_token(lexer_context,token_type);
+            CLua::get_next_token(lexer_context,token_type);
          }
 
          if (lexer_context.luau_capture_state.brace_balance == 0 && lexer_context.luau_capture_state.met_first_brace)
          {
-            lexer_context.switch_consumer_mode(ConsumerType::LuaU);
+            lexer_context.switch_consumer_mode(ConsumerMode::LuaU);
          };
       }
    };
 
-   namespace LUAUCode {
+   namespace LuaUCode {
+
+      bool is_valid_lua_block(LexerContext& lexer_context,size_t peek_offset)
+      {
+         auto current_char = lexer_context.source.peek(peek_offset);
+
+         while (current_char == '=')
+         {
+            peek_offset++;
+            current_char = lexer_context.source.peek(peek_offset);
+         };
+
+         return current_char == '[';
+      };
 
       bool is_lua_string(LexerContext& lexer_context)
       {
@@ -683,19 +716,14 @@ namespace Util {
 
          auto next_char = lexer_context.source.peek();
 
-         if (current_char == '[' && next_char == '=')
+         if (current_char == '[' && is_valid_lua_block(lexer_context,1)) 
          {
-            auto another_char = lexer_context.source.peek(2);
-            return another_char == '[';
-         } else if(current_char == '[' && next_char == '[')
-         {
-            return true;
-         } else if (current_char == '[')
-         {
-            return false;
-         } else {
+            return true; 
+         }  else if(current_char != '[') [[likely]] {
             return true;
          };
+
+         return false;
       };
 
       bool is_lua_comment(LexerContext& lexer_context)
@@ -727,13 +755,10 @@ namespace Util {
          RBracket,
          String,
          Comment,
-         Symbol,
-         Whitespace,
-         NewLine,
          Other,
          Error,
          EndOfFile,
-         NoToken,
+         None
       };
 
       enum class LuaUCharType: uint8_t {
@@ -768,10 +793,10 @@ namespace Util {
             luau_char_type_map[char_code] = LuaUCharType::Other;
          }
 
-         luau_char_type_map['{'] = LuaUCharType::LBracket;
-         luau_char_type_map['}'] = LuaUCharType::RBracket;
+         luau_char_type_map[static_cast<unsigned char>('{')] = LuaUCharType::LBracket;
+         luau_char_type_map[static_cast<unsigned char>('}')] = LuaUCharType::RBracket;
 
-         luau_char_type_map['\0'] = LuaUCharType::EndOfFile;
+         luau_char_type_map[static_cast<unsigned char>('\0')] = LuaUCharType::EndOfFile;
          
          return luau_char_type_map;
       }();
@@ -789,7 +814,6 @@ namespace Util {
                return LuaUTokenType::Other;
             case LuaUCharType::Symbol:
             {
-               
                if (is_lua_comment(lexer_context))
                {
                   return LuaUTokenType::Comment;
@@ -797,7 +821,6 @@ namespace Util {
                {
                   return LuaUTokenType::String;
                }
-
                return LuaUTokenType::Other;
             }
             case LuaUCharType::LBracket:
@@ -810,27 +833,254 @@ namespace Util {
                return LuaUTokenType::Error;
          };
 
-         return LuaUTokenType::NoToken;
+         return LuaUTokenType::None;
       };
 
-      LuaUTokenType get_next_luau_token(LexerContext& lexer_context)
-      {  
-         auto luau_token_type = guess_luau_token_type(lexer_context);
-         
-         switch (luau_token_type)
+      /// @brief it also consumes while asserting on the note but I don't know how to call this function then otherwise
+      /// @param lexer_context 
+      /// @return 
+      void assert_is_lua_comment(LexerContext &lexer_context)
+      {
+         Assert(
+            lexer_context.source.see_current() == '-' && lexer_context.source.peek() == '-',
+            LexerError +
+            "expected comment mode character, got something else"s +
+            LexerErrorEnd
+         )
+         lexer_context.source.consume(2);
+      };    
+
+      bool process_end_of_lua_block_token(LexerContext& lexer_context,size_t equal_sign_count)
+      {
+         size_t equal_signs_in_row = 0;
+
+         Assert(
+            lexer_context.source.see_current() == ']',
+            LexerError +
+            "assertion broken, expected comment closing character, got something else instead"s +
+            LexerErrorEnd
+         )
+
+         lexer_context.source.consume();
+
+         auto current_char = lexer_context.source.see_current();
+         while (current_char == '=')
          {
-            case LuaUTokenType::LBracket:
-               break;
-            case LuaUTokenType::RBracket:
-               break;
-            default:
-               break;
+            equal_signs_in_row++;
+            lexer_context.source.consume();
+            current_char = lexer_context.source.see_current();
+         };
+
+         if (current_char != ']')
+         {
+            return false;
          }
+
+         lexer_context.source.consume();
+         return equal_signs_in_row == equal_sign_count;
+      };
+
+      bool process_is_lua_block(LexerContext& lexer_context,size_t& equal_sign_count)
+      {  
+         if (lexer_context.source.see_current() != '[')
+         {
+            return false;
+         };
+
+         while (lexer_context.source.peek(equal_sign_count + 1) == '='){
+            equal_sign_count++;
+         };
+
+         lexer_context.source.consume(equal_sign_count + 1);
+         
+         if (lexer_context.source.see_current() != '[')
+         {
+            return false;
+         };
+
+         lexer_context.source.consume();
+         return true;
+      };
+
+      void consume_lua_block_token(LexerContext& lexer_context,size_t equal_sign_count)
+      {
+
+         auto current_char = lexer_context.source.see_current();
+         auto char_type = character_map[current_char];
+
+         while (char_type != CharacterType::EndOfFile)
+         {
+            if (current_char == ']' && process_end_of_lua_block_token(lexer_context,equal_sign_count))
+            {
+               return;
+            } else {
+               lexer_context.source.consume();
+            };
+
+            current_char = lexer_context.source.see_current();
+            char_type = character_map[current_char];
+         };
+         
+         return lexer_context.record_error(ErrorCode::UnclosedLuaBlock);
+      };
+
+      void consume_lua_basic_string_token(LexerContext& lexer_context)
+      {
+         auto start_char = lexer_context.source.see_current();
+
+         Assert(
+            start_char == '\'' ||
+            start_char == '"' ||
+            start_char == '`',
+            LexerError + 
+            "assertion broken, the tested char is not a string start char"s +
+            LexerErrorEnd
+         )
+
+         lexer_context.source.consume();
+         auto current_char = lexer_context.source.see_current();
+         while (character_map[current_char] != CharacterType::EndOfFile)
+         {
+            if (current_char == start_char)
+            {
+               lexer_context.source.consume();
+               break;
+            };
+            if (current_char == '\\')
+            {
+               lexer_context.source.consume();
+               auto next_char = lexer_context.source.see_current(); 
+               if (character_map[next_char] == CharacterType::EndOfFile)
+               {
+                  return lexer_context.record_error(ErrorCode::UnclosedLuaBlock);
+                  //more specifically string is not closed properly but it's LuaU's VM problem
+               };
+            };
+            lexer_context.source.consume();
+            current_char = lexer_context.source.see_current();
+         };
+      };
+
+      void consume_lua_string_token(LexerContext& lexer_context)
+      {
+         size_t equal_sign_count = 0;
+         if (process_is_lua_block(lexer_context,equal_sign_count))
+         {
+            return consume_lua_block_token(lexer_context,equal_sign_count);
+         } else {
+            return consume_lua_basic_string_token(lexer_context);
+         };
+      };
+
+      void consume_lua_inline_comment_token(LexerContext& lexer_context)
+      {
+         auto char_type = character_map[lexer_context.source.see_current()];
+         while (char_type != CharacterType::NewLine)
+         {
+            if (char_type == CharacterType::EndOfFile)
+            {
+               return lexer_context.record_error(ErrorCode::UnclosedLuaBlock);
+            };
+            lexer_context.source.consume();
+         };
+      };
+
+      void consume_lua_comment_token(LexerContext& lexer_context)
+      {
+         size_t equal_sign_count = 0;
+         assert_is_lua_comment(lexer_context);
+         if (process_is_lua_block(lexer_context,equal_sign_count))
+         {
+            return consume_lua_block_token(lexer_context,equal_sign_count);
+         } else {
+            /*
+               Assert(
+                  equal_sign_count == 0,
+                  LexerError +
+                  "unexpected state where equal sign count is non-zero, where it should be"s +  
+                  LexerErrorEnd
+               )
+
+               //ignore byproduct as it's not harmful
+            */
+            return consume_lua_inline_comment_token(lexer_context);
+         }
+      };
+
+      void consume_lua_other_token(LexerContext& lexer_context)
+      {
+         lexer_context.source.consume();
+      };
+
+      void consume_l_bracket(LexerContext& lexer_context)
+      {
+         Assert(
+            lexer_context.source.see_current() == '{',
+            LexerError +
+            "expected { token, got something else instead"s + 
+            LexerErrorEnd
+         )
+
+         auto& brace_balance = lexer_context.luau_code_state.brace_balance;
+         brace_balance++;
+
+         lexer_context.source.consume();
+      };
+
+      void consume_r_bracket(LexerContext& lexer_context)
+      {
+         Assert(
+            lexer_context.source.see_current() == '}',
+            LexerError +
+            "expected } token, got something else instead"s + 
+            LexerErrorEnd
+         )
+
+         auto& brace_balance = lexer_context.luau_code_state.brace_balance;
+         auto& met_first_brace = lexer_context.luau_code_state.met_first_brace;
+         if (brace_balance <= 0)
+         {
+            //invalid state, error should be reported
+            return lexer_context.record_error(ErrorCode::UnexpectedTokenType); //could be something more specific but no ideas   
+         } 
+         brace_balance--;   
+         lexer_context.source.consume();
       };
 
       void consume_lua_block(LexerContext& lexer_context)
       {
-         
+         auto& brace_balance = lexer_context.luau_code_state.brace_balance;
+         do {
+            auto luau_token_type = guess_luau_token_type(lexer_context);
+
+            switch (luau_token_type)
+            {
+            case LuaUTokenType::Comment:
+               consume_lua_comment_token(lexer_context);
+               break;
+            case LuaUTokenType::String:
+               consume_lua_string_token(lexer_context);
+               break;
+            case LuaUTokenType::LBracket:
+               consume_l_bracket(lexer_context);
+               break;
+            case LuaUTokenType::RBracket:
+               consume_r_bracket(lexer_context);
+               break;
+            case LuaUTokenType::Other:
+               consume_lua_other_token(lexer_context);
+               break;
+            case LuaUTokenType::Error:
+               consume_error_token(lexer_context);
+            case LuaUTokenType::EndOfFile:
+               return lexer_context.record_error(ErrorCode::UnclosedLuaBlock);
+            default:
+               consume_unexpected_token(lexer_context);
+               break;
+            }
+         } while (brace_balance != 0);
+
+         return;
       };
 
       TokenType guess_token_type(LexerContext& lexer_context)
@@ -840,12 +1090,6 @@ namespace Util {
 
          switch (character_type)
          {
-            case CharacterType::Error:
-               return TokenKind<ErrorToken>::value;
-            case CharacterType::Letter: 
-               return TokenKind<IdentifierToken>::value;
-            case CharacterType::Numeric:
-               return TokenKind<NumericToken>::value;
             case CharacterType::Symbol:
             {
                auto next_char = static_cast<unsigned char>(lexer_context.source.peek());
@@ -858,40 +1102,38 @@ namespace Util {
                };
                return TokenKind<SymbolToken>::value;
             }
-            case CharacterType::Whitespace:
-               return TokenKind<WhitespaceToken>::value;
-            case CharacterType::NewLine:
-               return TokenKind<NewLineToken>::value;
-            case CharacterType::EndOfFile:
-               return TokenKind<EOFToken>::value;
             default:
-               return TokenKind<ErrorToken>::value;
+               return CLua::guess_token_type(lexer_context);
          };
 
          return TokenKind<NoToken>::value;
       };
 
-      TokenType get_next_token(LexerContext& lexer_context){
+      TokenType process_next_token(LexerContext& lexer_context){
          TokenType token_type = guess_token_type(lexer_context);
          lexer_context.original_token_type = token_type;
+         lexer_context.ultimate_token_type = token_type;
+         
          switch (token_type)
          {
          case TokenType::LuaBlock:
             consume_lua_block(lexer_context);
-            lexer_context.switch_consumer_mode(ConsumerType::CLua);
+            lexer_context.switch_consumer_mode(ConsumerMode::CLua);
             break;
          case TokenType::Whitespace:
-            CLUA::get_next_token(lexer_context,TokenType::Whitespace);
+            CLua::get_next_token(lexer_context,TokenType::Whitespace);
             break;
          case TokenType::None:
-            CLUA::get_next_token(lexer_context,TokenType::None);
+            CLua::get_next_token(lexer_context,TokenType::None);
          case TokenType::Error:
-            CLUA::get_next_token(lexer_context,TokenType::Error);
+            CLua::get_next_token(lexer_context,TokenType::Error);
             break;
          default:
             consume_unexpected_token(lexer_context);
             break;
          };
+
+         return token_type;
       };
    };
 
@@ -903,18 +1145,20 @@ namespace Util {
       
       switch (lexer_context.see_current_consumer_mode())
       {
-      case ConsumerType::CLua:
-         token_type = CLUA::guess_token_type(lexer_context);
+      case ConsumerMode::CLua:
+         token_type = CLua::guess_token_type(lexer_context);
          lexer_context.original_token_type = token_type;
-         CLUA::get_next_token(lexer_context,token_type);
+         lexer_context.ultimate_token_type = token_type;
+         CLua::get_next_token(lexer_context,token_type);
          break;
-      case ConsumerType::LuaUCapture:
-         token_type = LUAUCapture::guess_token_type(lexer_context);
+      case ConsumerMode::LuaUCapture:
+         token_type = LuaUCapture::guess_token_type(lexer_context);
          lexer_context.original_token_type = token_type;
-         LUAUCapture::get_next_token(lexer_context,token_type);
+         lexer_context.ultimate_token_type = token_type;
+         LuaUCapture::get_next_token(lexer_context,token_type);
          break;
-      case ConsumerType::LuaU:
-         token_type = LUAUCode::get_next_token(lexer_context);
+      case ConsumerMode::LuaU:
+         token_type = LuaUCode::process_next_token(lexer_context);
          break;
       default:
          Assert(false,

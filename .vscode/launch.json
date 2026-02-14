@@ -29,7 +29,7 @@
             "name": "Debug Lexer",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/lexer.exe",
+            "program": "${workspaceFolder}/build/lexer_debug.exe",
             "args": ["${workspaceFolder}/src/bundler.cpp"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

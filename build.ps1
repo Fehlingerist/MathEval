@@ -17,11 +17,11 @@ if (!(Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Nul
 
 # --- Mode Logic ---
 if ($Mode -eq "debug") {
-    Write-Host "🔨 Building in [DEBUG] mode..." -ForegroundColor Cyan
+    Write-Host "Building in [DEBUG] mode..."
     $Flags   = "-g -D_DEBUG"
     $Output  = "$OutDir/lexer_debug.exe"
 } else {
-    Write-Host "🚀 Building in [RELEASE] mode..." -ForegroundColor Gold
+    Write-Host "Building in [RELEASE] mode..."
     $Flags   = "-O3 -DNDEBUG" # -O3 for max optimization
     $Output  = "$OutDir/lexer.exe"
 }
@@ -30,7 +30,7 @@ $FullCommand = "$Compiler $Std $Source $($Includes -join ' ') $Flags -o $Output"
 Invoke-Expression $FullCommand
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✅ Build Successful: $Output" -ForegroundColor Green
+    Write-Host "Build Successful: $Output"
 } else {
-    Write-Host "❌ Build Failed with exit code $LASTEXITCODE" -ForegroundColor Red
+    Write-Host "Build Failed with exit code $LASTEXITCODE"
 }

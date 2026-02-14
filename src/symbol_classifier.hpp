@@ -139,11 +139,9 @@ std::unordered_map<std::string, SymbolKind> normalized_symbols = {
                     break;
                 }
             }
-
             if (match)
                 return kind;
             }   
-
             return SymbolKind::UNKNOWN; 
         }
 }

@@ -4,7 +4,7 @@
 
 int main()
 {
-    std::cout << "Write some expression expression: " << std::endl;
+    std::cout << "Write some expression: " << std::endl;
     
     std::string input;
     

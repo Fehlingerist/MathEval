@@ -13,8 +13,8 @@ namespace Util {
 
     using namespace std::string_literals;
 
-    consteval auto LexerError = "Lexer Error: "s;
-    consteval auto LexerErrorEnd = "\n"s;
+    constexpr auto LexerError = "Lexer Error: "s;
+    constexpr auto LexerErrorEnd = "\n"s;
 
     enum class ErrorCode: uint8_t {
         None,
@@ -30,7 +30,7 @@ namespace Util {
         UnclosedChar,
         InvalidCharCode,
         TooLongChar,
-        UncloedLuaBlock,
+        UnclosedLuaBlock,
     };
 
     enum class TokenType: uint8_t {
@@ -130,7 +130,7 @@ namespace Util {
             return index + consume_distance - 1 < source_size;
         };
 
-        inline unsigned char consume(size_t consume_distance = 1)
+        inline void consume(size_t consume_distance = 1)
         {
             Assert(
                 can_consume_sentinel(consume_distance),
@@ -139,7 +139,6 @@ namespace Util {
                 LexerErrorEnd
             );
             index += consume_distance;
-            return source_buffer[index];
         };
 
         inline unsigned char see_current()
@@ -329,7 +328,7 @@ namespace Util {
         NumberBase number_base = NumberBase::None;
     };
 
-    enum ConsumerType  {
+    enum class ConsumerMode  {
         CLua,
         LuaU,
         LuaUCapture,
@@ -348,11 +347,12 @@ namespace Util {
     class LexerContext {
         private:
         bool emitted = false;
-        ConsumerType consumer_type = ConsumerType::CLua;
+        ConsumerMode consumer_type = ConsumerMode::CLua;
 
         public:
 
         LuaUCaptureState luau_capture_state;
+        LuaUCodeState luau_code_state;
 
         Source source;
         std::vector<Error> errors;
@@ -367,15 +367,16 @@ namespace Util {
         LexerContext(Source& source): source(source)
         {};
 
-        inline ConsumerType see_current_consumer_mode()
+        inline ConsumerMode see_current_consumer_mode()
         {
             return consumer_type;
         };
 
-        inline void switch_consumer_mode(ConsumerType new_consumer_type)
+        inline void switch_consumer_mode(ConsumerMode new_consumer_type)
         {
             consumer_type = new_consumer_type;
             luau_capture_state = LuaUCaptureState();
+            luau_code_state = LuaUCodeState();
         };
 
         inline void token_enter()
