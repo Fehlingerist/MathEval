@@ -507,8 +507,12 @@ namespace Util {
             return lexer_context.record_error(ErrorCode::UnclosedString);
          } else if (current_char == '\\') 
          {
-            lexer_context.source.consume(); // skip '\'
-            lexer_context.source.consume(); 
+            lexer_context.source.consume(); // skip '\' unless nullptr
+            auto next_char = lexer_context.source.see_current();
+            if (character_map[next_char] == CharacterType::EndOfFile)
+            {
+               return lexer_context.record_error(ErrorCode::UnclosedString);
+            };
             continue;
          }
       } while (current_char != '"');
