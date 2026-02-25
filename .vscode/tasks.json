@@ -2,9 +2,9 @@
     "version": "2.0.0",
     "tasks": [
           {
-            "label": "prepare-lexer-test",
+            "label": "build-lexer-test",
             "type": "shell",
-            "command": "${workspaceFolder}/builders/lexer/build_test.ps1",
+            "command": "${workspaceFolder}/tests/lexer/build_test.ps1",
             "args": [],
             "problemMatcher": ["$gcc"],
             "group": {
@@ -21,7 +21,7 @@
         {
             "label": "build-lexer",
             "type": "shell",
-            "command": "${workspaceFolder}/builders/lexer/build.ps1",
+            "command": "${workspaceFolder}/builds/lexer/build.ps1",
             "args": [],
             "problemMatcher": ["$gcc"],
             "group": {
@@ -38,28 +38,11 @@
         {
             "label": "build-parser",
             "type": "shell",
-            "command": "${workspaceFolder}/builders/parser/build.ps1",
+            "command": "${workspaceFolder}/builds/parser/build.ps1",
             "args": [],
             "problemMatcher": ["$gcc"],
             "group": {
                 "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            }
-        },
-        {
-            "label": "prepare-parser-test",
-            "type": "shell",
-            "command": "${workspaceFolder}", //no test cases yet 
-            "args": [],
-            "problemMatcher": ["$gcc"],
-            "group": {
-                "kind": "test",
                 "isDefault": true
             },
             "presentation": {

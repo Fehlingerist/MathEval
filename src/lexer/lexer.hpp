@@ -194,7 +194,7 @@ namespace Util {
 
     struct TokenBase
     {
-        TokenType token_type = TokenType::Error;
+        TokenType token_type = TokenType::None;
         size_t length = 0;
         size_t offset = 0;
     };
@@ -278,7 +278,6 @@ namespace Util {
     };  
 
     struct TokenGeneric : TokenBase {
-
         template <typename T>
         requires std::derived_from<T, TokenBase>
         T& as() {
@@ -287,9 +286,12 @@ namespace Util {
         
             const TokenType expected = TokenKind<T>::value;
 
+            /*
             static_assert(expected != TokenType::None,
                 "Invalid token template type is being used, they must be derived from TokenBase"s
             );
+            There's a real use case of NoToken being created from TokenGeneric
+            */
 
             Assert(
                 token_type == expected,
@@ -302,30 +304,6 @@ namespace Util {
             );
 
             return reinterpret_cast<T&>(*this);
-        }
-
-        template <typename T>
-        requires std::derived_from<T, TokenBase>
-        const T& as() const {
-            static_assert(sizeof(T) == sizeof(TokenGeneric), "Size mismatch"s);
-            
-            const TokenType expected = TokenKind<T>::value;
-
-            static_assert(expected != TokenType::None,
-                "Invalid token template type is being used, they must be derived from TokenBase"s
-            );
-
-            Assert(
-                token_type == expected,
-                LexerError 
-                + "expected this token type: "s 
-                + std::to_string(static_cast<int>(expected)) 
-                + " got: "s 
-                + std::to_string(static_cast<int>(token_type)) 
-                + LexerErrorEnd
-            );
-
-            return reinterpret_cast<const T&>(*this);
         }
     };
 
@@ -466,7 +444,7 @@ namespace Util {
     {
         private:
         LexerContext lexer_context;
-        TokenGeneric last_peeked_token = static_cast<TokenGeneric>(NoToken());
+        TokenGeneric last_peeked_token = TokenGeneric();
 
         public:
         Lexer() = default;
@@ -495,7 +473,7 @@ namespace Util {
             if (last_peeked_token.token_type != TokenType::None)
             {
                 auto last_token_copy = last_peeked_token;
-                last_peeked_token = static_cast<TokenGeneric>(NoToken());
+                last_peeked_token.as<NoToken>();
 
                 return last_token_copy;
             }
@@ -510,6 +488,7 @@ namespace Util {
                 "can't peek next token again after doing it before"s + 
                 LexerErrorEnd
             )
+            lexer_context.token_enter();
             auto token = get_next_token();
             last_peeked_token = token;            
             return token;

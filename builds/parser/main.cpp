@@ -19,5 +19,7 @@ int main()
 
     auto value = parser.eval_math();
 
+    std::cout << value << std::endl;
+
     return 0;
 }

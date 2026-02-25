@@ -4,11 +4,11 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-         {
+        {
             "name": "Debug Lexer Tester",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/test/test.exe",
+            "program": "${workspaceFolder}/tests/lexer/test.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -22,9 +22,10 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "prepare-test",
+            "preLaunchTask": "build-lexer-test",
             "miDebuggerPath": "gdb"
         },
+
         {
             "name": "Debug Lexer",
             "type": "cppdbg",
@@ -43,8 +44,29 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "build",
+            "preLaunchTask": "build-lexer",
             "miDebuggerPath": "gdb"
-        }
+        },
+        {
+            "name": "Debug Parser",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/parser_debug.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build-parser",
+            "miDebuggerPath": "gdb"
+        },
     ]
 }

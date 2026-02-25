@@ -85,8 +85,12 @@ namespace ASTParser{
             return lexer.get_last_error();
         };
 
-        SymbolClassifier::SymbolKind get_last_symbol()
+        SymbolClassifier::SymbolKind get_current_symbol()
         {
+            if (current_token.token_type != Util::TokenType::Symbol) [[unlikely]]
+            {
+                return SymbolClassifier::SymbolKind::Unknown;
+            };
             return lexer.get_last_symbol();
         };
 

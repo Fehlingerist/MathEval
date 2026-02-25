@@ -297,14 +297,14 @@ namespace Util {
       auto start = lexer_context.source.index;
       auto start_ptr = reinterpret_cast<char*>(lexer_context.source.get_source_buffer() + start);
 
-      auto symbol_kind = SymbolKind::UNKNOWN;
+      auto symbol_kind = SymbolKind::Unknown;
       
       while (char_type == CharacterType::Symbol)
       {
          auto length = lexer_context.source.index - start + 1; 
-         auto next_symbol = get_symbol_from_buffer_fragment(start_ptr,length);
+         auto next_symbol = get_symbol_from_buffer(start_ptr,length);
       
-         if (next_symbol == SymbolKind::UNKNOWN)
+         if (next_symbol == SymbolKind::Unknown)
          {
             return lexer_context.record_symbol(symbol_kind);
          }
@@ -315,7 +315,7 @@ namespace Util {
          char_type = character_map[current_char];
       }
 
-      if (symbol_kind == SymbolKind::UNKNOWN)
+      if (symbol_kind == SymbolKind::Unknown)
       {
          return lexer_context.record_error(ErrorCode::UnknownSymbol);
       }
