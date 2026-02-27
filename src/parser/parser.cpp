@@ -10,8 +10,8 @@ namespace ASTParser{
     using NumberType = Util::NumberType;
     using Source = Util::Source;
 
-    double eval_local_expression();
-    double eval_subexpression();
+    double eval_local_expression(ParserContext& parser_context);
+    double eval_subexpression(ParserContext& parser_context);
 
     bool is_additive_operator(SymbolKind symbol_kind)
     {
@@ -40,6 +40,20 @@ namespace ASTParser{
     bool is_math_symbol_operator(SymbolKind symbol_kind)
     {
         return is_additive_operator(symbol_kind) || is_multiplicative_operator(symbol_kind);
+    };
+
+    SymbolKind check_next_symbol(ParserContext& parser_context)
+    {
+        auto current_token = parser_context.get_next_token();
+        if(current_token.token_type == TokenType::Symbol)
+        {
+            return parser_context.get_current_symbol();
+        };
+        return SymbolKind::Unknown;
+    };
+
+    SymbolKind check_next_operator(ParserContext& parser_context) {
+
     };
 
     double eval_numeric_token_bin_base(ParserContext& parser_context)
@@ -119,6 +133,26 @@ namespace ASTParser{
         return number_val;
     };
 
+    double parse_int(Source& int_slice)
+    {  
+        double number_value = 0;
+        auto current_char = int_slice.see_current();
+
+        while (Util::TypeClassificator::is_numeric_char(current_char))
+        {
+            unsigned int digit_value = 0;
+            
+            digit_value = current_char - '0';
+
+            int_slice.consume();
+            current_char = int_slice.see_current();
+            number_value *= 10;
+            number_value += digit_value;
+        };
+
+        return number_value;
+    };
+
     double parse_double(Source& double_slice)
     {
         double initial_number = parse_int(double_slice);
@@ -140,26 +174,6 @@ namespace ASTParser{
 
         return initial_number + fraction_part / divisor_size;
     }
-
-    double parse_int(Source& int_slice)
-    {  
-        double number_value = 0;
-        auto current_char = int_slice.see_current();
-
-        while (Util::TypeClassificator::is_numeric_char(current_char))
-        {
-            unsigned int digit_value = 0;
-            
-            digit_value = current_char - '0';
-
-            int_slice.consume();
-            current_char = int_slice.see_current();
-            number_value *= 10;
-            number_value += digit_value;
-        };
-
-        return number_value;
-    };
 
     double eval_double(ParserContext& parser_context)
     {
@@ -209,6 +223,8 @@ namespace ASTParser{
                 return 0;
             };
         }
+        
+        return 0;//error pizda bljać
     };
 
     double eval_subexpression(ParserContext& parser_context){
@@ -244,14 +260,83 @@ namespace ASTParser{
         return number_value * n_factor;
     };
 
+    double expect_subexpression(ParserContext& parser_context){
+        auto current_token = parser_context.see_current_token();
+
+        if (current_token.token_type != TokenType::Numeric && parser_context.get_current_symbol() != SymbolKind::LBrace && parser_context.get_current_symbol() != SymbolKind::Minus)
+        {
+            return 0;//error pizda nahui
+        };
+        
+        return eval_subexpression(parser_context);
+    };
+
+    double eval_multiplicative_expression(ParserContext& parser_context){
+        auto start_number = expect_subexpression(parser_context);
+
+        return start_number;
+    };
+
+    double eval_additive_expression(ParserContext& parser_context)
+    {
+        auto current_value = eval_multiplicative_expression(parser_context);
+        auto sum = current_value;
+        while (parser_context.see_current_token().token_type != TokenType::EndOfFile)
+        {
+            auto current_symbol = check_next_symbol(parser_context);
+
+            if (current_symbol == SymbolKind::LBrace || current_symbol == SymbolKind::Minus){
+                current_value = expect_subexpression(parser_context);
+            } else if(is_math_symbol_operator(current_symbol)){
+                if (is_additive_operator(current_symbol))
+                {
+                    parser_context.get_next_token();
+                    current_value = eval_multiplicative_expression(parser_context);
+                } else {
+                    return 0; //invalid kurwa
+                };
+            } else {
+                //unknown symbol no handler yet
+                return 0;
+            };
+            sum += current_value;
+            parser_context.get_next_token();
+        };
+        return sum;
+    };
+
     double eval_local_expression(ParserContext& parser_context)
     {
+        auto current_symbol = parser_context.get_current_symbol();
+        if (current_symbol != SymbolKind::LBrace)
+        {
+            return 0; //error pizda
+        };
+        auto current_token = parser_context.get_next_token();
 
+        double local_expression_value = 0;
+
+        while (parser_context.get_current_symbol() != SymbolKind::RBrace)
+        {
+            if (current_token.token_type == TokenType::EndOfFile)
+            {
+                return 0; //another error nahui unclosed local expression kurwa
+            };
+            local_expression_value += eval_additive_expression(parser_context);
+        };
+        parser_context.get_next_token();//consume RBrace symbol
+
+        return local_expression_value;
     };
 
     double eval_math_expression(ParserContext& parser_context)
     {
-
+      double sum = 0;
+      while (parser_context.see_current_token().token_type != TokenType::EndOfFile)
+      {
+        sum += eval_additive_expression(parser_context);
+      }
+      return sum;
     };
 
     double Parser::eval_math()
@@ -259,4 +344,4 @@ namespace ASTParser{
         auto token = parser_context.get_next_token();
         return eval_math_expression(parser_context);
     };
-};
+}
